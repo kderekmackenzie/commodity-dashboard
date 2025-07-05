@@ -30,7 +30,7 @@ st.write("Select a year and an investment amount to see what your commodity inve
 start_year = st.sidebar.selectbox("Start Year", sorted(data.index.year.unique()))
 amount_invested = st.sidebar.number_input("Investment Amount ($)", min_value=100.0, value=1000.0, step=100.0)
 
-# Safe default commodities
+# Safe default commodities (only if they exist in the dataset)
 default_commodities = [
     c for c in [
         'Gold ($/troy oz)', 
@@ -43,7 +43,7 @@ default_commodities = [
 commodities = st.sidebar.multiselect("Choose Commodities", options=data.columns.tolist(), default=default_commodities)
 
 # Let user choose chart mode
-chart_mode = st.sidebar.radio("Chart Mode", ["Percent Change", "Raw Prices", "Normalized to 100" ])
+chart_mode = st.sidebar.radio("Chart Mode", ["Raw Prices", "Normalized to 100", "Percent Change"])
 
 # Find first available month of the selected year
 start_date = data[data.index.year == start_year].index.min()
@@ -88,19 +88,22 @@ else:
 
     # Price chart
     st.subheader("📉 Price History")
+    filtered_data = data[data.index >= start_date][valid_commodities]
+
     if chart_mode == "Raw Prices":
-        st.line_chart(data[valid_commodities])
+        st.line_chart(filtered_data)
     elif chart_mode == "Normalized to 100":
-        normalized = data[valid_commodities] / data[valid_commodities].iloc[0] * 100
+        normalized = filtered_data / filtered_data.iloc[0] * 100
         st.line_chart(normalized)
     elif chart_mode == "Percent Change":
-        start_vals = data.loc[start_date, valid_commodities]
-        pct_change = data[valid_commodities].divide(start_vals) * 100
+        start_vals = filtered_data.iloc[0]
+        pct_change = filtered_data.divide(start_vals) * 100
         st.line_chart(pct_change)
 
     # Correlation heatmap
     st.subheader("🔍 Commodity Price Correlation Heatmap")
-    corr = data[valid_commodities].corr()
+    corr = filtered_data.corr()
     fig, ax = plt.subplots()
     sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax)
     st.pyplot(fig)
+
