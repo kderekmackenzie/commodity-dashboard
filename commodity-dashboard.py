@@ -30,7 +30,7 @@ st.write("Select a year and an investment amount to see what your commodity inve
 start_year = st.sidebar.selectbox("Start Year", sorted(data.index.year.unique()))
 amount_invested = st.sidebar.number_input("Investment Amount ($)", min_value=100.0, value=1000.0, step=100.0)
 
-# Safe default commodities (only if they exist in the dataset)
+# Safe default commodities
 default_commodities = [
     c for c in [
         'Gold ($/troy oz)', 
