@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from openai import OpenAI
+
 
 # Load historical commodity price data
 data = pd.read_csv(
@@ -43,7 +45,7 @@ default_commodities = [
 commodities = st.sidebar.multiselect("Choose Commodities", options=data.columns.tolist(), default=default_commodities)
 
 # Let user choose chart mode
-chart_mode = st.sidebar.radio("Chart Mode", ["Normalized to 100", "Percent Change", "Raw Prices"])
+chart_mode = st.sidebar.radio("Chart Mode", ["Normalized to 100", "Percent Change", "Raw Prices" ])
 
 # Find first available month of the selected year
 start_date = data[data.index.year == start_year].index.min()
@@ -106,4 +108,96 @@ else:
     fig, ax = plt.subplots()
     sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax)
     st.pyplot(fig)
+
+
+    # Seasonality analysis with percent deviation from yearly mean
+    st.subheader("📅 Seasonal Averages by Month (Deviation from Yearly Mean)")
+    seasonal_data = data[valid_commodities].copy()
+    seasonal_data['Year'] = seasonal_data.index.year
+    seasonal_data['Month'] = seasonal_data.index.month
+
+    # Group and normalize as percent deviation from the yearly mean
+    grouped = seasonal_data.groupby(['Year', 'Month']).mean()
+    yearly_means = grouped.groupby(level=0).transform('mean')
+    percent_deviation = ((grouped - yearly_means) / yearly_means) * 100
+    percent_deviation.index = grouped.index  # Keep MultiIndex
+
+    # Average across years per month
+    monthly_deviation = percent_deviation.groupby(level='Month').mean()
+
+    for commodity in valid_commodities:
+        fig3, ax3 = plt.subplots()
+        monthly_deviation[commodity].plot(ax=ax3)
+        ax3.set_title(f"Seasonality for {commodity} (% Deviation from Yearly Mean)")
+        ax3.set_xlabel("Month")
+        ax3.set_ylabel("% Deviation")
+        ax3.set_xticks(range(1, 13))
+        ax3.set_xticklabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
+        ax3.axhline(0, linestyle='--', color='gray', linewidth=1)
+        st.pyplot(fig3)
+
+# Define default years if not already defined
+years_available = sorted(data.index.year.unique())
+default_start_year = years_available[0]
+default_end_year = years_available[-1]
+
+# Use previously defined start_year and end_year if available, else fallback to defaults
+try:
+    base_start_year
+except NameError:
+    base_start_year = default_start_year
+
+try:
+    base_end_year
+except NameError:
+    base_end_year = default_end_year
+
+# Use main timeframe or fallback
+start_year = base_start_year
+end_year = base_end_year
+
+# OpenAI Q&A section
+st.subheader("Ask Questions About the Dataset")
+
+query_start_year, query_end_year = st.select_slider(
+    "Select year range for OpenAI data query",
+    options=years_available,
+    value=(start_year, end_year)
+)
+
+api_key = st.text_input("Enter your OpenAI API key to enable natural language queries:", type="password")
+
+if api_key:
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+
+    user_query = st.text_area("Ask a question about the data")
+
+    if st.button("Submit Query") and user_query:
+        with st.spinner("Thinking..."):
+            query_mask = (data.index.year >= query_start_year) & (data.index.year <= query_end_year)
+            query_data = data.loc[query_mask, commodities]
+            df_sample = query_data.dropna(axis=1, how='any').tail(100)
+
+            prompt = f"""
+You are a data analyst. Given the following dataframe, answer the question:
+
+DataFrame:
+{df_sample.head(10).to_csv(index=False)}
+
+Question: {user_query}
+
+Answer:
+"""
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful data analyst."},
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                st.success(response.choices[0].message.content)
+            except Exception as e:
+                st.error(f"Error from OpenAI: {e}")
 
