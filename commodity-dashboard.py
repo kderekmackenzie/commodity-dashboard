@@ -43,7 +43,7 @@ default_commodities = [
 commodities = st.sidebar.multiselect("Choose Commodities", options=data.columns.tolist(), default=default_commodities)
 
 # Let user choose chart mode
-chart_mode = st.sidebar.radio("Chart Mode", ["Raw Prices", "Normalized to 100", "Percent Change"])
+chart_mode = st.sidebar.radio("Chart Mode", ["Normalized to 100", "Percent Change", "Raw Prices"])
 
 # Find first available month of the selected year
 start_date = data[data.index.year == start_year].index.min()
