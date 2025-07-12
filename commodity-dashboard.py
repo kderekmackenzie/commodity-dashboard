@@ -43,14 +43,34 @@ amount_invested = st.sidebar.number_input("Investment Amount ($)", min_value=100
 # Safe default commodities (only if they exist in the dataset)
 default_commodities = [
     c for c in [
-        'Gold ($/troy oz)', 
-        'Silver ($/troy oz)', 
-        'Copper ($/mt)', 
-        'Crude oil, average ($/bbl)', 
+        'Gold ($/troy oz)',
+        'Silver ($/troy oz)',
+        'Copper ($/mt)',
+        'Crude oil, average ($/bbl)',
         'S&P500'
     ] if c in data.columns
 ]
 commodities = st.sidebar.multiselect("Choose Commodities", options=data.columns.tolist(), default=default_commodities)
+
+# Options for the relative strength benchmark
+# Ensure these exist in your data.columns
+relative_strength_benchmark_options = [
+    c for c in ['S&P500', 'Gold ($/troy oz)', 'Silver ($/troy oz)', 'Copper ($/mt)', 'Crude oil, average ($/bbl)']
+    if c in data.columns
+]
+# Set default to S&P500 if available, otherwise the first option
+default_rs_benchmark = 'S&P500' if 'S&P500' in relative_strength_benchmark_options else (relative_strength_benchmark_options[0] if relative_strength_benchmark_options else None)
+
+relative_strength_benchmark = None
+if relative_strength_benchmark_options:
+    relative_strength_benchmark = st.sidebar.selectbox(
+        "Compare Relative Strength Against",
+        options=relative_strength_benchmark_options,
+        index=relative_strength_benchmark_options.index(default_rs_benchmark) if default_rs_benchmark else 0
+    )
+else:
+    st.sidebar.info("No valid commodities available for relative strength comparison.")
+
 
 # Let user choose chart mode
 chart_mode = st.sidebar.radio("Chart Mode", ["Normalized to 100", "Percent Change", "Raw Prices" ])
@@ -128,7 +148,7 @@ else:
     grouped = seasonal_data.groupby(['Year', 'Month']).mean()
     yearly_means = grouped.groupby(level=0).transform('mean')
     percent_deviation = ((grouped - yearly_means) / yearly_means) * 100
-    percent_deviation.index = grouped.index  # Keep MultiIndex
+    percent_deviation.index = grouped.index # Keep MultiIndex
 
     # Average across years per month
     monthly_deviation = percent_deviation.groupby(level='Month').mean()
@@ -144,28 +164,28 @@ else:
         ax3.axhline(0, linestyle='--', color='gray', linewidth=1)
         st.pyplot(fig3)
 
-
     # Relative Strength Charts
-    st.subheader("💪 Relative Strength vs. S&P500")
-    sp500_column_name = 'S&P500'
+    st.subheader(f"💪 Relative Strength vs. {relative_strength_benchmark}")
+    benchmark_column_name = relative_strength_benchmark
 
-    # Check if S&P500 data is available and valid
-    if sp500_column_name not in data.columns or data[sp500_column_name].isna().all():
-        st.warning("S&P500 data is not available or is entirely missing. Cannot calculate relative strength.")
+    # Check if the selected benchmark data is available and valid
+    if benchmark_column_name is None or benchmark_column_name not in data.columns or data[benchmark_column_name].isna().all():
+        st.warning(f"{benchmark_column_name} data is not available or is entirely missing. Cannot calculate relative strength.")
     else:
         # Filter for data from the selected start_date onwards
         relative_strength_data = data[data.index >= start_date].copy()
 
-        # Ensure S&P500 column is numerical and non-zero
-        sp500_prices = pd.to_numeric(relative_strength_data[sp500_column_name], errors='coerce').dropna()
+        # Ensure benchmark column is numerical and non-zero
+        benchmark_prices = pd.to_numeric(relative_strength_data[benchmark_column_name], errors='coerce').dropna()
 
-        if sp500_prices.empty or (sp500_prices == 0).any():
-            st.warning("S&P500 data is invalid or contains zero values, preventing relative strength calculation.")
+        if benchmark_prices.empty or (benchmark_prices == 0).any():
+            st.warning(f"{benchmark_column_name} data is invalid or contains zero values, preventing relative strength calculation.")
         else:
-            commodities_for_rs = [c for c in valid_commodities if c != sp500_column_name]
+            # Exclude the benchmark commodity itself from the list of commodities to compare
+            commodities_for_rs = [c for c in valid_commodities if c != benchmark_column_name]
 
             if not commodities_for_rs:
-                st.info("Select commodities (other than S&P500) to view their relative strength.")
+                st.info(f"Select commodities (other than {benchmark_column_name}) to view their relative strength.")
             else:
                 for commodity in commodities_for_rs:
                     commodity_prices = pd.to_numeric(relative_strength_data[commodity], errors='coerce').dropna()
@@ -173,49 +193,28 @@ else:
                     # Align indices and drop NaNs for consistent calculation
                     aligned_data = pd.DataFrame({
                         'Commodity': commodity_prices,
-                        'S&P500': sp500_prices
+                        benchmark_column_name: benchmark_prices
                     }).dropna()
 
                     if not aligned_data.empty:
-                        # Calculate relative strength: Commodity Price / S&P500 Price
-                        # Handle potential division by zero by replacing 0s in S&P500 with NaN before division
-                        aligned_data['S&P500_clean'] = aligned_data['S&P500'].replace(0, pd.NA)
-                        relative_strength = (aligned_data['Commodity'] / aligned_data['S&P500_clean']).dropna()
+                        # Calculate relative strength: Commodity Price / Benchmark Price
+                        # Handle potential division by zero by replacing 0s in benchmark_prices with NaN before division
+                        aligned_data[f'{benchmark_column_name}_clean'] = aligned_data[benchmark_column_name].replace(0, pd.NA)
+                        relative_strength = (aligned_data['Commodity'] / aligned_data[f'{benchmark_column_name}_clean']).dropna()
 
                         if not relative_strength.empty:
                             fig_rs, ax_rs = plt.subplots(figsize=(10, 5))
                             ax_rs.plot(relative_strength.index, relative_strength.values)
-                            ax_rs.set_title(f"Relative Strength of {commodity} vs. S&P500")
+                            ax_rs.set_title(f"Relative Strength of {commodity} vs. {benchmark_column_name}")
                             ax_rs.set_xlabel("Date")
-                            ax_rs.set_ylabel("Ratio (Commodity / S&P500)")
+                            ax_rs.set_ylabel(f"Ratio ({commodity} / {benchmark_column_name})")
                             ax_rs.grid(True)
                             st.pyplot(fig_rs)
                         else:
-                            st.info(f"Not enough common data for {commodity} and S&P500 to calculate relative strength.")
+                            st.info(f"Not enough common data for {commodity} and {benchmark_column_name} to calculate relative strength.")
                     else:
-                        st.info(f"Not enough common data for {commodity} and S&P500 to calculate relative strength.")
+                        st.info(f"Not enough common data for {commodity} and {benchmark_column_name} to calculate relative strength.")
 
-# --- REMOVED THE FOLLOWING SECTION ---
-# Define default years if not already defined
-# years_available = sorted(data.index.year.unique())
-# default_start_year = years_available[0]
-# default_end_year = years_available[-1]
-
-# Use previously defined start_year and end_year if available, else fallback to defaults
-# try:
-#     base_start_year
-# except NameError:
-#     base_start_year = default_start_year
-
-# try:
-#     base_end_year
-# except NameError:
-#     base_end_year = default_end_year
-
-# Use main timeframe or fallback
-# start_year = base_start_year
-# end_year = base_end_year
-# --- END OF REMOVED SECTION ---
 
 
 # OpenAI Q&A section
