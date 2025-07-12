@@ -28,7 +28,7 @@ for col in data.columns:
     data[col] = pd.to_numeric(data[col], errors='coerce')
 
 st.title("Commodity Dashboard")
-st.write("Built by [kderekmackenzie](https://substack.com/@kderekmackenzie) — for Github repo [click here](https://github.com/kderekmackenzie).")
+st.write("Built by [kderekmackenzie](https://substack.com/@kderekmackenzie) — for Github repo [click here](https://github.com/kderekmackenzie/commodity-dashboard).")
 
 st.write("Explore commodity data from 1960 to today — visualize trends, analyze seasonality, relative strength and query with OpenAI + Pinecone vector search.")
 
