@@ -1,10 +1,12 @@
+# commodity-dashboard.py 
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from openai import OpenAI
-
+from pinecone_setup import get_pinecone_index, query_pinecone_index
 
 # Load historical commodity price data
 data = pd.read_csv(
@@ -25,8 +27,14 @@ for col in data.columns:
     )
     data[col] = pd.to_numeric(data[col], errors='coerce')
 
-st.title("📈 What If I Bought Commodities?")
-st.write("Select a year and an investment amount to see what your commodity investment would be worth today.")
+st.title("Commodity Dashboard")
+st.write("Built by [kderekmackenzie](https://substack.com/@kderekmackenzie) — [click here](https://github.com/kderekmackenzie) for Github repo.")
+
+st.write("Explore commodity data from 1960 to today — visualize trends, analyze seasonality, and query with OpenAI + Pinecone vector search.")
+
+
+st.write("Select a year and an investment amount to see what a commodity investment would be worth today.")
+
 
 # Sidebar inputs
 start_year = st.sidebar.selectbox("Start Year", sorted(data.index.year.unique()))
@@ -136,68 +144,88 @@ else:
         ax3.axhline(0, linestyle='--', color='gray', linewidth=1)
         st.pyplot(fig3)
 
+# --- REMOVED THE FOLLOWING SECTION ---
 # Define default years if not already defined
-years_available = sorted(data.index.year.unique())
-default_start_year = years_available[0]
-default_end_year = years_available[-1]
+# years_available = sorted(data.index.year.unique())
+# default_start_year = years_available[0]
+# default_end_year = years_available[-1]
 
 # Use previously defined start_year and end_year if available, else fallback to defaults
-try:
-    base_start_year
-except NameError:
-    base_start_year = default_start_year
+# try:
+#     base_start_year
+# except NameError:
+#     base_start_year = default_start_year
 
-try:
-    base_end_year
-except NameError:
-    base_end_year = default_end_year
+# try:
+#     base_end_year
+# except NameError:
+#     base_end_year = default_end_year
 
 # Use main timeframe or fallback
-start_year = base_start_year
-end_year = base_end_year
+# start_year = base_start_year
+# end_year = base_end_year
+# --- END OF REMOVED SECTION ---
+
 
 # OpenAI Q&A section
 st.subheader("Ask Questions About the Dataset")
-
-query_start_year, query_end_year = st.select_slider(
-    "Select year range for OpenAI data query",
-    options=years_available,
-    value=(start_year, end_year)
-)
-
 api_key = st.text_input("Enter your OpenAI API key to enable natural language queries:", type="password")
 
 if api_key:
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key)
-
     user_query = st.text_area("Ask a question about the data")
 
     if st.button("Submit Query") and user_query:
-        with st.spinner("Thinking..."):
-            query_mask = (data.index.year >= query_start_year) & (data.index.year <= query_end_year)
-            query_data = data.loc[query_mask, commodities]
-            df_sample = query_data.dropna(axis=1, how='any').tail(100)
+        with st.spinner("Thinking..."): # This line was incorrectly indented in the original input
 
-            prompt = f"""
-You are a data analyst. Given the following dataframe, answer the question:
+            # Retrieve relevant context from ChromaDB
+            try:
+                context_chunks = query_pinecone_index(api_key, user_query, n_results=30)
+                context = "\n\n".join(context_chunks).strip()
 
-DataFrame:
-{df_sample.head(10).to_csv(index=False)}
+                if not context:
+                    st.warning("No relevant data found in the vector database for this question.")
+                else:
+                    # Construct prompt
+                    prompt = f"""
+You are a data analyst. Use the following data to answer the user's question.
 
-Question: {user_query}
+Context:
+{context}
+
+Question:
+{user_query}
 
 Answer:
 """
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful data analyst."},
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                st.success(response.choices[0].message.content)
+
+                    # Query GPT
+                    client = OpenAI(api_key=api_key)
+                    response = client.chat.completions.create(
+                        model="gpt-4",
+                        messages=[
+                            # --- MODIFIED SYSTEM MESSAGE HERE ---
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You are an expert data analyst assistant for a Streamlit commodity dashboard. "
+                                    "This dashboard processes a comprehensive historical commodity price dataset and "
+                                    "can calculate and visualize metrics like correlation, returns, and seasonality. "
+                                    "When answering questions, prioritize information from the provided context chunks. "
+                                    "If a question asks for a calculation the dashboard already performs (like seasonality), "
+                                    "explain the concept, use the provided text context for specific data points if available, "
+                                    "and explicitly refer to the dashboard's existing visualization/calculation capabilities "
+                                    "(e.g., 'refer to the commodity seasonality chart displayed above'). "
+                                    "Do not state that data is missing or suggest external tools for tasks the dashboard already handles."
+                                    "Do always provide an answer derived from the data and some context that would be useful to someone curious about this dataset."
+                                )
+                            },
+                            # --- END MODIFIED SYSTEM MESSAGE ---
+                            {"role": "user", "content": prompt}
+                        ]
+                    )
+                    answer = response.choices[0].message.content
+                    st.success(answer)
+
             except Exception as e:
-                st.error(f"Error from OpenAI: {e}")
+                st.error(f"Error: {e}")
 
