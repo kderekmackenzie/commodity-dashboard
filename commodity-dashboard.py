@@ -279,3 +279,9 @@ Answer:
             except Exception as e:
                 st.error(f"Error: {e}")
 
+# Share raw data 
+
+
+st.write("View the raw data source from World Bank:")
+st.write("[Download Monthly Prices XLS - Current to July 2025](https://thedocs.worldbank.org/en/doc/18675f1d1639c7a34d463f59263ba0a2-0050012025/related/CMO-Historical-Data-Monthly.xlsx)")
+
