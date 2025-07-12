@@ -28,9 +28,9 @@ for col in data.columns:
     data[col] = pd.to_numeric(data[col], errors='coerce')
 
 st.title("Commodity Dashboard")
-st.write("Built by [kderekmackenzie](https://substack.com/@kderekmackenzie) — [click here](https://github.com/kderekmackenzie) for Github repo.")
+st.write("Built by [kderekmackenzie](https://substack.com/@kderekmackenzie) — for Github repo [click here](https://github.com/kderekmackenzie).")
 
-st.write("Explore commodity data from 1960 to today — visualize trends, analyze seasonality, and query with OpenAI + Pinecone vector search.")
+st.write("Explore commodity data from 1960 to today — visualize trends, analyze seasonality, relative strength and query with OpenAI + Pinecone vector search.")
 
 
 st.write("Select a year and an investment amount to see what a commodity investment would be worth today.")
@@ -143,6 +143,57 @@ else:
         ax3.set_xticklabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
         ax3.axhline(0, linestyle='--', color='gray', linewidth=1)
         st.pyplot(fig3)
+
+
+    # Relative Strength Charts
+    st.subheader("💪 Relative Strength vs. S&P500")
+    sp500_column_name = 'S&P500'
+
+    # Check if S&P500 data is available and valid
+    if sp500_column_name not in data.columns or data[sp500_column_name].isna().all():
+        st.warning("S&P500 data is not available or is entirely missing. Cannot calculate relative strength.")
+    else:
+        # Filter for data from the selected start_date onwards
+        relative_strength_data = data[data.index >= start_date].copy()
+
+        # Ensure S&P500 column is numerical and non-zero
+        sp500_prices = pd.to_numeric(relative_strength_data[sp500_column_name], errors='coerce').dropna()
+
+        if sp500_prices.empty or (sp500_prices == 0).any():
+            st.warning("S&P500 data is invalid or contains zero values, preventing relative strength calculation.")
+        else:
+            commodities_for_rs = [c for c in valid_commodities if c != sp500_column_name]
+
+            if not commodities_for_rs:
+                st.info("Select commodities (other than S&P500) to view their relative strength.")
+            else:
+                for commodity in commodities_for_rs:
+                    commodity_prices = pd.to_numeric(relative_strength_data[commodity], errors='coerce').dropna()
+
+                    # Align indices and drop NaNs for consistent calculation
+                    aligned_data = pd.DataFrame({
+                        'Commodity': commodity_prices,
+                        'S&P500': sp500_prices
+                    }).dropna()
+
+                    if not aligned_data.empty:
+                        # Calculate relative strength: Commodity Price / S&P500 Price
+                        # Handle potential division by zero by replacing 0s in S&P500 with NaN before division
+                        aligned_data['S&P500_clean'] = aligned_data['S&P500'].replace(0, pd.NA)
+                        relative_strength = (aligned_data['Commodity'] / aligned_data['S&P500_clean']).dropna()
+
+                        if not relative_strength.empty:
+                            fig_rs, ax_rs = plt.subplots(figsize=(10, 5))
+                            ax_rs.plot(relative_strength.index, relative_strength.values)
+                            ax_rs.set_title(f"Relative Strength of {commodity} vs. S&P500")
+                            ax_rs.set_xlabel("Date")
+                            ax_rs.set_ylabel("Ratio (Commodity / S&P500)")
+                            ax_rs.grid(True)
+                            st.pyplot(fig_rs)
+                        else:
+                            st.info(f"Not enough common data for {commodity} and S&P500 to calculate relative strength.")
+                    else:
+                        st.info(f"Not enough common data for {commodity} and S&P500 to calculate relative strength.")
 
 # --- REMOVED THE FOLLOWING SECTION ---
 # Define default years if not already defined
