@@ -1,4 +1,4 @@
-from chroma_setup import build_pinecone_index 
+from pinecone_setup import build_pinecone_index 
 import os
 
 # Try to load from Streamlit secrets if available (production)
