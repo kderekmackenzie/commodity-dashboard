@@ -36,7 +36,7 @@ class OpenAIEmbeddingFunction:
         self.client = OpenAI(api_key=api_key)
 
     def __call__(self, input: List[str]) -> List[List[float]]:
-        response = self.client.embeddings.create(input=input, model="text-embedding-ada-002")
+        response = self.client.embeddings.create(input=input, model="text-embedding-3-small")
         return [data.embedding for data in response.data]
 
 embed_fn = OpenAIEmbeddingFunction(api_key=OPENAI_API_KEY)
